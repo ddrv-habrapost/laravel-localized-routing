@@ -2,10 +2,36 @@
 
 namespace App\Http;
 
+use App\Contracts\SiteDetector;
+use App\Http\Middleware\Authenticate;
+use App\Http\Middleware\CheckForMaintenanceMode;
+use App\Http\Middleware\ViewData;
+use App\Http\Middleware\EncryptCookies;
+use App\Http\Middleware\RedirectIfAuthenticated;
+use App\Http\Middleware\TrimStrings;
+use App\Http\Middleware\TrustProxies;
+use App\Http\Middleware\VerifyCsrfToken;
+use Closure;
+use Illuminate\Auth\Middleware\AuthenticateWithBasicAuth;
+use Illuminate\Auth\Middleware\Authorize;
+use Illuminate\Auth\Middleware\EnsureEmailIsVerified;
+use Illuminate\Auth\Middleware\RequirePassword;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Http\Kernel as HttpKernel;
+use Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull;
+use Illuminate\Foundation\Http\Middleware\ValidatePostSize;
+use Illuminate\Http\Middleware\SetCacheHeaders;
+use Illuminate\Http\Request;
+use Illuminate\Routing\Middleware\SubstituteBindings;
+use Illuminate\Routing\Middleware\ThrottleRequests;
+use Illuminate\Routing\Middleware\ValidateSignature;
+use Illuminate\Session\Middleware\AuthenticateSession;
+use Illuminate\Session\Middleware\StartSession;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 class Kernel extends HttpKernel
 {
+
     /**
      * The application's global HTTP middleware stack.
      *
@@ -14,11 +40,11 @@ class Kernel extends HttpKernel
      * @var array
      */
     protected $middleware = [
-        \App\Http\Middleware\TrustProxies::class,
-        \App\Http\Middleware\CheckForMaintenanceMode::class,
-        \Illuminate\Foundation\Http\Middleware\ValidatePostSize::class,
-        \App\Http\Middleware\TrimStrings::class,
-        \Illuminate\Foundation\Http\Middleware\ConvertEmptyStringsToNull::class,
+        TrustProxies::class,
+        CheckForMaintenanceMode::class,
+        ValidatePostSize::class,
+        TrimStrings::class,
+        ConvertEmptyStringsToNull::class,
     ];
 
     /**
@@ -28,13 +54,13 @@ class Kernel extends HttpKernel
      */
     protected $middlewareGroups = [
         'web' => [
-            \App\Http\Middleware\EncryptCookies::class,
-            \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
-            \Illuminate\Session\Middleware\StartSession::class,
-            // \Illuminate\Session\Middleware\AuthenticateSession::class,
-            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-            \App\Http\Middleware\VerifyCsrfToken::class,
-            \Illuminate\Routing\Middleware\SubstituteBindings::class,
+            EncryptCookies::class,
+            AddQueuedCookiesToResponse::class,
+            StartSession::class,
+            ShareErrorsFromSession::class,
+            VerifyCsrfToken::class,
+            SubstituteBindings::class,
+            ViewData::class,
         ],
 
         'api' => [
@@ -42,6 +68,8 @@ class Kernel extends HttpKernel
             'bindings',
         ],
     ];
+
+    // ...
 
     /**
      * The application's route middleware.
@@ -51,16 +79,16 @@ class Kernel extends HttpKernel
      * @var array
      */
     protected $routeMiddleware = [
-        'auth' => \App\Http\Middleware\Authenticate::class,
-        'auth.basic' => \Illuminate\Auth\Middleware\AuthenticateWithBasicAuth::class,
-        'bindings' => \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        'cache.headers' => \Illuminate\Http\Middleware\SetCacheHeaders::class,
-        'can' => \Illuminate\Auth\Middleware\Authorize::class,
-        'guest' => \App\Http\Middleware\RedirectIfAuthenticated::class,
-        'password.confirm' => \Illuminate\Auth\Middleware\RequirePassword::class,
-        'signed' => \Illuminate\Routing\Middleware\ValidateSignature::class,
-        'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
-        'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+        'auth' => Authenticate::class,
+        'auth.basic' => AuthenticateWithBasicAuth::class,
+        'bindings' => SubstituteBindings::class,
+        'cache.headers' => SetCacheHeaders::class,
+        'can' => Authorize::class,
+        'guest' => RedirectIfAuthenticated::class,
+        'password.confirm' => RequirePassword::class,
+        'signed' => ValidateSignature::class,
+        'throttle' => ThrottleRequests::class,
+        'verified' => EnsureEmailIsVerified::class,
     ];
 
     /**
@@ -71,12 +99,83 @@ class Kernel extends HttpKernel
      * @var array
      */
     protected $middlewarePriority = [
-        \Illuminate\Session\Middleware\StartSession::class,
-        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
-        \App\Http\Middleware\Authenticate::class,
-        \Illuminate\Routing\Middleware\ThrottleRequests::class,
-        \Illuminate\Session\Middleware\AuthenticateSession::class,
-        \Illuminate\Routing\Middleware\SubstituteBindings::class,
-        \Illuminate\Auth\Middleware\Authorize::class,
+        StartSession::class,
+        ShareErrorsFromSession::class,
+        Authenticate::class,
+        ThrottleRequests::class,
+        AuthenticateSession::class,
+        SubstituteBindings::class,
+        Authorize::class,
     ];
+
+    /**
+     * Get the route dispatcher callback.
+     *
+     * @return Closure
+     */
+    protected function dispatchToRouter()
+    {
+        return function (Request $request) {
+            /*
+             * Определяем сайт
+             */
+            /** @var SiteDetector $siteDetector */
+            $siteDetector = $this->app->get(SiteDetector::class);
+            $site = $siteDetector->detect($request->getHost());
+
+            /*
+             * Определяем первый сегмент УРЛ
+             */
+            $segment = (string)$request->segment(1);
+
+            /*
+             * Если первый сегмент УРЛ совпадает с одним из поддерживаемых сайтом языков, значит это язык
+             */
+            if ($segment && $site->isLanguageSupported($segment)) {
+                $language = $segment;
+            } else {
+                $language = $site->getDefaultLanguage();
+            }
+
+            /*
+             * Задаём приложению список поддерживаемых локалей
+             */
+            $this->app->get('config')->set('app.supported_locales', $site->getSupportedLanguages());
+
+            /*
+             * Задаём приложению локаль по умолчанию
+             */
+            $this->app->get('config')->set('app.fallback_locale', $site->getDefaultLanguage());
+
+            /*
+             * Задаём приложению локаль
+             */
+            $this->app->setLocale($language);
+
+            /*
+             * Если текущий язык не совпадает с языком сайта по умолчанию
+             */
+            if (!$site->isLanguageDefault($language)) {
+                /*
+                 * Вырезаем первый сегмент из УРЛ запроса.
+                 */
+                $server = $request->server();
+                $server['REQUEST_URI'] = mb_substr($server['REQUEST_URI'], mb_strlen($language) + 1);
+                $request = $request->duplicate(
+                    $request->query->all(),
+                    $request->all(),
+                    $request->attributes->all(),
+                    $request->cookies->all(),
+                    $request->files->all(),
+                    $server
+                );
+            }
+
+            /*
+             * Запускаем пайплайн
+             */
+            $this->app->instance('request', $request);
+            return $this->router->dispatch($request);
+        };
+    }
 }
