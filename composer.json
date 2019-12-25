@@ -1,9 +1,10 @@
 {
-    "name": "laravel/laravel",
+    "name": "ddrv/habrapost481726-laravel-localized-routing",
     "type": "project",
-    "description": "The Laravel Framework.",
+    "description": "Localized routing in Laravel-based project.",
     "keywords": [
-        "framework",
+        "routing",
+        "localization",
         "laravel"
     ],
     "license": "MIT",
