@@ -11,6 +11,7 @@
 |
 */
 
-Route::get('/', function () {
-    return view('welcome');
-});
+Route::get('/', 'DemoController@home')->name('web.home');
+Route::get('/--about--', 'DemoController@about')->name('web.about');
+Route::get('/--contacts--', 'DemoController@contacts')->name('web.contacts');
+Route::get('/--news--', 'DemoController@news')->name('web.news');

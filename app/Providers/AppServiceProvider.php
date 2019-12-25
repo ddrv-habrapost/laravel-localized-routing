@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Contracts\SiteDetector;
+use App\Services\SiteDetector\FakeSiteDetector;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -13,7 +15,18 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register()
     {
-        //
+
+        /*
+         * Строим сервис.
+         */
+        $this->app->singleton(FakeSiteDetector::class, function () {
+            return new FakeSiteDetector();
+        });
+
+        /*
+         * Биндим контракт
+         */
+        $this->app->bind(SiteDetector::class, FakeSiteDetector::class);
     }
 
     /**
