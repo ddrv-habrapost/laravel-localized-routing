@@ -11,9 +11,10 @@
 |
 */
 
-$app = new Illuminate\Foundation\Application(
+$app = new App\Custom\Illuminate\Foundation\Application(
     $_ENV['APP_BASE_PATH'] ?? dirname(__DIR__)
 );
+$app->get('router')->setRoutes(new App\Custom\Illuminate\Routing\RouteCollection());
 
 /*
 |--------------------------------------------------------------------------
